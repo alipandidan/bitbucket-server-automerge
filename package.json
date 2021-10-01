@@ -1,0 +1,16 @@
+{
+  "name": "bitbucket-server-automerge",
+  "version": "1.0.0",
+  "description": "Bitbucket server automerge",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ali Pandidan <pandidanx@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^0.21.4",
+    "dotenv": "^10.0.0"
+  }
+}
