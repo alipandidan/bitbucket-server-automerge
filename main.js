@@ -1,4 +1,5 @@
-const axios = require('axios').default;
+const moment = require('moment')
+const axios = require('axios').default
 require('dotenv').config()
 
 axios.interceptors.request.use(function (config) {
@@ -16,45 +17,87 @@ async function main() {
 
             let _merge = await merge(pullRequest.id) // Check for merge vetoes or do merge if all checks are passed
 
-            // Check if merge is rejected due to an out of date branch
-            if (_merge.data.errors.length == 1 && _merge.data.errors[0].message.includes('configured to require fast-forward merges')) {
+            if (isSuccessfull(_merge)) {
+                log("Pull request #" + pullRequest.id + " successfully merged")
+            } else if (isFailed(_merge)) { // Check if merge is rejected due to an out of date branch
 
-                let _rebase = await rebase(pullRequest.id) // Do rebase
+                log("Failed merging pull request #" + pullRequest.id + ": " + JSON.stringify(_merge.data.errors))
 
-                if (String(_rebase.status).startsWith(2)) {
-                    console.log("Pull request #" + pullRequest.id + " successfully rebased")
+                if (hasOne(_merge.data.errors) && _merge.data.errors.some(error => error.message.includes('configured to require fast-forward merges'))) {
+                    let _rebase = await rebase(pullRequest.id) // Do rebase
 
-                    _merge = await merge(pullRequest.id) // Get merge status or do merge after rebase
+                    if (isSuccessfull(_rebase)) {
+                        log("Pull request #" + pullRequest.id + " successfully rebased")
 
-                    // Check if merge status changed to require successfull builds after rebase
-                    if (_merge.data.errors.length == 1 && _merge.data.errors[0].vetoes.some(veto => veto.summaryMessage.includes('Not all required builds are successful yet'))) {
-                        while (String(_merge.status).startsWith(4)) { // Monitor pull request to merge after builds are successfull
+                        _merge = await merge(pullRequest.id) // Get current merge status or do merge after rebase
+
+                        while (isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
                             _merge = await merge(pullRequest.id)
+                            if(isFailed(_merge)) {
+                                log(_merge.data.errors)
+                            }
 
-                            // TODO: break if merge failed or error has changed
+                            await sleep(10)
+
+                            // Should keep loop alive if there's only one error of type "com.atlassian.bitbucket.pull.PullRequestMergeVetoedException" where "detailedMessage" says either  "it has in-progress builds" or "need a minimum of one successful build"
+                            //
+                            // [{"context":null,"message":"Merging the pull request has been vetoed.","exceptionName":"com.atlassian.bitbucket.pull.PullRequestMergeVetoedException","conflicted":false,"vetoes":[{"summaryMessage":"Not all required builds are successful yet","detailedMessage":"You still need a minimum of one successful build before this pull request can be merged."}]}]
+                            // [{"context":null,"message":"Merging the pull request has been vetoed.","exceptionName":"com.atlassian.bitbucket.pull.PullRequestMergeVetoedException","conflicted":false,"vetoes":[{"summaryMessage":"Not all required builds are successful yet","detailedMessage":"You cannot merge this pull request while it has in-progress builds."}]}]
+
+
+                            // const shouldContinue = _merge.data.errors.some(error =>
+                            //     error.vetoes.length == 1 &&
+                            //     error.vetoes.some(veto => veto.detailedMessage.includes('it has in-progress builds'))
+                            // )
+
+
                         }
+                    } else {
+                        console.log("Rebased failed for pull request #" + pullRequest.id)
+                        log(JSON.stringify(_rebase.data.errors))
                     }
                 }
 
             } else {
-                console.log("Skipping pull request #" + pullRequest.id + " due to other merge checks not passed\n")
+                log("Skipping pull request #" + pullRequest.id + " due to other merge checks not passed\n")
+                log(JSON.stringify(_merge.data.errors))
             }
 
         } else {
-            console.log('Pull request #' + pullRequest.id + ' is not labeled as automerge')
+            log('Pull request #' + pullRequest.id + ' is not labeled as automerge')
         }
 
-        await new Promise(resolve => setTimeout(resolve, 1 * 1000));
+        await sleep(2)
 
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1 * 1000));
+    await sleep(2)
     main()
 
 }
 
+async function sleep(seconds = 1) {
+    await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+}
+
+function hasOne(array) {
+    return array.length === 1 ?? false
+}
+
+function isSuccessfull(axios) {
+    return String(axios.status).startsWith(2) ?? false
+}
+
+function isFailed(axios) {
+    return String(axios.status).startsWith(4) ?? false
+}
+
+function log(message) {
+    console.log('[' + moment().format('YYYY/MM/DD HH:mm:ss') + '] ' + message)
+}
+
 async function rebase(pullRequestId) {
-    console.log("Rebasing pull request #" + pullRequestId)
+    log("Rebasing pull request #" + pullRequestId)
     try {
         let latestPullRequestRevision = await getPullRequest(pullRequestId)
         return await axios.post(process.env.BITBUCKET_PR_GIT_API + pullRequestId + '/rebase', {
@@ -66,7 +109,7 @@ async function rebase(pullRequestId) {
 }
 
 async function merge(pullRequestId) {
-    console.log("Merging pull request #" + pullRequestId)
+    log("Merging pull request #" + pullRequestId)
     try {
         let latestPullRequestRevision = await getPullRequest(pullRequestId)
         return await axios.post(process.env.BITBUCKET_PR_API + pullRequestId + '/merge', {
@@ -80,11 +123,14 @@ async function merge(pullRequestId) {
 }
 
 async function isAutoMerge(pullRequestId) {
-    console.log("Checking if pull request #" + pullRequestId + " has auto merge label")
+    log("Checking if pull request #" + pullRequestId + " has auto merge label")
     try {
         let activities = await axios.get(process.env.BITBUCKET_PR_API + pullRequestId + '/activities')
         for (activity of activities.data.values) {
-            if (activity.action == 'COMMENTED' && activity.comment.text == '>automerge') {
+            if (activity.action == 'COMMENTED' &&
+                activity.comment.text == '>automerge' &&
+                (!process.env.ALLOWED_USERS || process.env.ALLOWED_USERS.split(',').includes(activity.user.name))
+            ) {
                 return true
             }
         }
@@ -95,18 +141,18 @@ async function isAutoMerge(pullRequestId) {
 }
 
 async function getPullRequests() {
-    console.log("Getting list of pull requests")
+    log("Getting list of pull requests")
     try {
         let pullRequests =  await axios.get(process.env.BITBUCKET_PR_API)
         return pullRequests.data.values
     } catch(error) {
-        console.log(error.response)
+        log(JSON.stringify(error.response))
         return []
     }
 }
 
 async function getPullRequest(pullRequestId) {
-    console.log("Getting latest pull request revision #" + pullRequestId)
+    log("Getting latest pull request revision #" + pullRequestId)
     try {
         let pullRequest =  await axios.get(process.env.BITBUCKET_PR_API + pullRequestId)
         return pullRequest.data
