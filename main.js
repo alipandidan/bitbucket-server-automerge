@@ -34,7 +34,7 @@ async function main() {
                         while (isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
                             _merge = await merge(pullRequest.id)
                             if(isFailed(_merge)) {
-                                log(_merge.data.errors)
+                                log(JSON.stringify(_merge.data.errors))
                             }
 
                             await sleep(10)
@@ -49,9 +49,8 @@ async function main() {
                             //     error.vetoes.length == 1 &&
                             //     error.vetoes.some(veto => veto.detailedMessage.includes('it has in-progress builds'))
                             // )
-
-
                         }
+
                     } else {
                         console.log("Rebased failed for pull request #" + pullRequest.id)
                         log(JSON.stringify(_rebase.data.errors))
@@ -71,13 +70,11 @@ async function main() {
 
     }
 
-    await sleep(2)
-    main()
-
+    setTimeout(main, 5 * 1000);
 }
 
 async function sleep(seconds = 1) {
-    await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+    return await new Promise(resolve => setTimeout(resolve, seconds * 1000));
 }
 
 function hasOne(array) {
