@@ -37,7 +37,7 @@ async function main() {
                                 log(JSON.stringify(_merge.data.errors))
                             }
 
-                            await sleep(10)
+                            await wait(10)
 
                             // Should keep loop alive if there's only one error of type "com.atlassian.bitbucket.pull.PullRequestMergeVetoedException" where "detailedMessage" says either  "it has in-progress builds" or "need a minimum of one successful build"
                             //
@@ -66,14 +66,14 @@ async function main() {
             log('Pull request #' + pullRequest.id + ' is not labeled as automerge')
         }
 
-        await sleep(2)
+        await wait(2)
 
     }
 
     setTimeout(main, 5 * 1000);
 }
 
-async function sleep(seconds = 1) {
+async function wait(seconds = 1) {
     return await new Promise(resolve => setTimeout(resolve, seconds * 1000));
 }
 
