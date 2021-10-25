@@ -3,6 +3,10 @@ const axios = require('axios').default
 require('colors');
 require('dotenv').config()
 
+process.on('unhandledRejection', (reason, promise) => {
+    console.log('Unhandled Rejection at:', reason.stack || reason)
+  })
+
 axios.interceptors.request.use(function (config) {
     config.headers.Authorization = 'Bearer ' + process.env.BITBUCKET_TOKEN;
     return config;
@@ -150,7 +154,6 @@ async function isAutoMerge(pullRequestId) {
         return Boolean(isAutoMergeAllowed)
 
     } catch(error) {
-        console.log(error.response.data)
         return false
     }
 }
@@ -161,7 +164,7 @@ async function getPullRequests() {
         let pullRequests =  await axios.get(process.env.BITBUCKET_PR_API)
         return pullRequests.data.values
     } catch(error) {
-        log(JSON.stringify(error.response))
+        log(JSON.stringify(error.response) || "Failed getting list of pull requests".red)
         return []
     }
 }
