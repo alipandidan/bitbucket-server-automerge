@@ -1,7 +1,7 @@
 const moment = require('moment')
 
-function hasOne(array) {
-    return array.length === 1 ?? false
+function hasOne(array = []) {
+    return array?.length === 1 ?? false
 }
 
 async function wait(seconds = 1) {
