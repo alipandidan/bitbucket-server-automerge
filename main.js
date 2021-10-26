@@ -3,9 +3,9 @@ const axios = require('axios').default
 require('colors');
 require('dotenv').config()
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.log('Unhandled Rejection at:', reason.stack || reason)
-  })
+// process.on('unhandledRejection', (reason, promise) => {
+//     console.log('Unhandled Rejection at:', reason.stack || reason)
+// })
 
 axios.interceptors.request.use(function (config) {
     config.headers.Authorization = 'Bearer ' + process.env.BITBUCKET_TOKEN;
@@ -39,23 +39,23 @@ async function main() {
 
                         while (isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
                             _merge = await merge(pullRequest.id)
-                            if(isFailed(_merge)) {
-                                log(JSON.stringify(_merge.data.errors))
+
+                            if (isSuccessfull(_merge)) {
+                                log("Pull request successfuly merged after rebasing.".green)
+                            } else {
+
+                                const prHasProblems = _merge.data.errors.some(error =>
+                                    error.vetoes.some(veto => veto.detailedMessage.includes('approvals before this pull request can be merged'))
+                                )
+
+                                if (prHasProblems) {
+                                    log("Failed to merge PR due to problems after rebase: ".red + JSON.stringify(_merge.data.errors))
+                                    break;
+                                }
+
                             }
 
                             await wait(10)
-
-                            // Should keep loop alive if there's only one error of type "com.atlassian.bitbucket.pull.PullRequestMergeVetoedException" where "detailedMessage" says either  "it has in-progress builds" or "need a minimum of one successful build"
-                            // [{"context":null,"message":"Merging the pull request has been vetoed.","exceptionName":"com.atlassian.bitbucket.pull.PullRequestMergeVetoedException","conflicted":false,"vetoes":[{"summaryMessage":"Not all required builds are successful yet","detailedMessage":"You still need a minimum of one successful build before this pull request can be merged."},
-                            // {"summaryMessage":"Requires approvals","detailedMessage":"You still need 2 approvals before this pull request can be merged."},{"summaryMessage":"Not all required reviewers have approved yet","detailedMessage":"At least 2 of the following users must review and approve this pull request before it can be merged."}]}]
-                            // [{"context":null,"message":"Merging the pull request has been vetoed.","exceptionName":"com.atlassian.bitbucket.pull.PullRequestMergeVetoedException","conflicted":false,"vetoes":[{"summaryMessage":"Not all required builds are successful yet","detailedMessage":"You still need a minimum of one successful build before this pull request can be merged."}]}]
-                            // [{"context":null,"message":"Merging the pull request has been vetoed.","exceptionName":"com.atlassian.bitbucket.pull.PullRequestMergeVetoedException","conflicted":false,"vetoes":[{"summaryMessage":"Not all required builds are successful yet","detailedMessage":"You cannot merge this pull request while it has in-progress builds."}]}]
-
-
-                            // const shouldContinue = _merge.data.errors.some(error =>
-                            //     error.vetoes.length == 1 &&
-                            //     error.vetoes.some(veto => veto.detailedMessage.includes('it has in-progress builds'))
-                            // )
                         }
 
                     } else {
@@ -73,7 +73,7 @@ async function main() {
             log(('Pull request #' + pullRequest.id + ' is not labeled as automerge').yellow)
         }
 
-        await wait(2)
+        await wait(5) // Timeout between each pull request processing
 
     }
 
