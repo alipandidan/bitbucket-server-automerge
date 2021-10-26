@@ -23,13 +23,13 @@ async function main() {
                 utils.log("Failed merging pull request #" + pullRequest.id + ": " + JSON.stringify(_merge.data.errors))
 
                 // Check if merge is rejected due to an out of date branch
-                if (hasOne(_merge.data.errors) && _merge.data.errors.some(error => error.message.includes('configured to require fast-forward merges'))) {
+                if (utils.hasOne(_merge.data.errors) && _merge.data.errors.some(error => error.message.includes('configured to require fast-forward merges'))) {
                     let _rebase = await pullRequest.rebase(pullRequest.id) // Do rebase
 
                     if (httpStatus.isSuccessful(_rebase)) {
                         utils.log("Pull request #" + pullRequest.id + " successfully rebased")
 
-                        _merge = await pullRequest.merge() // Get current merge status or do merge after rebase
+                        // _merge = await pullRequest.merge() // Get current merge status or do merge after rebase
 
                         while (httpStatus.isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
                             _merge = await pullRequest.merge()
@@ -47,12 +47,11 @@ async function main() {
                                 }
                             }
 
-                            await utils.wait(10)
+                            await utils.wait(30)
                         }
 
                     } else {
                         utils.log("Rebased failed for pull request #" + pullRequest.id)
-                        utils.log(JSON.stringify(_rebase.data.errors))
                     }
                 }
 
