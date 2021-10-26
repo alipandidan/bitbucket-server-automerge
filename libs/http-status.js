@@ -1,4 +1,4 @@
-function isSuccessfull(axios) {
+function isSuccessful(axios) {
     return String(axios.status).startsWith(2) ?? false
 }
 
@@ -7,6 +7,6 @@ function isFailed(axios) {
 }
 
 module.exports = {
-    isSuccessfull,
+    isSuccessful,
     isFailed
 }
