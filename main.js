@@ -1,12 +1,8 @@
 require('colors');
 const utils = require('./libs/utils')
+const httpStatus = require('./libs/http-status')
 const repository = require('./libs/bitbucket/repository')
 const PullRequest = require('./libs/bitbucket/pullrequest')
-
-
-// process.on('unhandledRejection', (reason, promise) => {
-//     console.log('Unhandled Rejection at:', reason.stack || reason)
-// })
 
 main()
 
@@ -21,28 +17,26 @@ async function main() {
 
             let _merge = await pullRequest.merge() // Check for merge vetoes or do merge if all checks are passed
 
-            if (isSuccessfull(_merge)) {
+            if (httpStatus.isSuccessful(_merge)) {
                 utils.log(("Pull request #" + pullRequest.id + " successfully merged (No rebase needed)").green)
-            } else if (isFailed(_merge)) {
-
+            } else if (httpStatus.isFailed(_merge)) {
                 utils.log("Failed merging pull request #" + pullRequest.id + ": " + JSON.stringify(_merge.data.errors))
 
                 // Check if merge is rejected due to an out of date branch
                 if (hasOne(_merge.data.errors) && _merge.data.errors.some(error => error.message.includes('configured to require fast-forward merges'))) {
                     let _rebase = await pullRequest.rebase(pullRequest.id) // Do rebase
 
-                    if (isSuccessfull(_rebase)) {
+                    if (httpStatus.isSuccessful(_rebase)) {
                         utils.log("Pull request #" + pullRequest.id + " successfully rebased")
 
                         _merge = await pullRequest.merge() // Get current merge status or do merge after rebase
 
-                        while (isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
+                        while (httpStatus.isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
                             _merge = await pullRequest.merge()
 
-                            if (isSuccessfull(_merge)) {
+                            if (httpStatus.isSuccessful(_merge)) {
                                 utils.log("Pull request successfuly merged after rebasing.".green)
                             } else {
-
                                 const prHasProblems = _merge.data.errors.some(error =>
                                     error.vetoes.some(veto => veto.detailedMessage.includes('approvals before this pull request can be merged'))
                                 )
@@ -51,7 +45,6 @@ async function main() {
                                     utils.log("Failed to merge PR due to problems after rebase: ".red + JSON.stringify(_merge.data.errors))
                                     break;
                                 }
-
                             }
 
                             await utils.wait(10)
