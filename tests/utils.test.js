@@ -10,6 +10,6 @@ describe('utils.hasOne', () => {
     });
 
     test('if fails when not one element', () => {
-        expect(utils.hasOne(['one', ['two']])).toBe(false);
+        expect(utils.hasOne(['one', 'two'])).toBe(false);
     });
 });

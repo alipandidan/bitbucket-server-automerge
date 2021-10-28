@@ -1,11 +1,11 @@
 const PullRequest = require('../../libs/bitbucket/pullrequest')
 
-describe('bitbucket.pullRequest.waitingForBuild', () => {
+describe('bitbucket.pullRequest.isWaitingForBuild', () => {
 
     test('if pull request waiting for merge with no vetoes', () => {
         let pullRequest = new PullRequest(1)
         pullRequest.mergeVetoes = []
-        expect(pullRequest.waitingForBuild()).toBe(false);
+        expect(pullRequest.isWaitingForBuild()).toBe(false);
     });
 
 
@@ -19,7 +19,7 @@ describe('bitbucket.pullRequest.waitingForBuild', () => {
               "conflicted": false,
             }
         ]
-        expect(pullRequest.waitingForBuild()).toBe(false);
+        expect(pullRequest.isWaitingForBuild()).toBe(false);
     });
 
 
@@ -39,7 +39,7 @@ describe('bitbucket.pullRequest.waitingForBuild', () => {
             }]
         }]
 
-        expect(pullRequest.waitingForBuild()).toBe(false);
+        expect(pullRequest.isWaitingForBuild()).toBe(false);
     });
 
 
@@ -68,7 +68,7 @@ describe('bitbucket.pullRequest.waitingForBuild', () => {
             }
           ]
 
-        expect(pullRequest.waitingForBuild()).toBe(false);
+        expect(pullRequest.isWaitingForBuild()).toBe(false);
     });
 
 });

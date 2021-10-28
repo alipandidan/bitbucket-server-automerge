@@ -1,8 +1,8 @@
 require('colors');
 const utils = require('./libs/utils')
-const httpStatus = require('./libs/http-status')
 const repository = require('./libs/bitbucket/repository')
 const PullRequest = require('./libs/bitbucket/pullrequest')
+const { setTimeout: setTimeoutPromise } = require('timers/promises');
 
 main()
 
@@ -15,55 +15,56 @@ async function main() {
 
         if (await pullRequest.isAutoMerge() && await pullRequest.canMerge()) {
 
-            let _merge = await pullRequest.merge() // Merge or return vetoes
+            let _merged = await pullRequest.merge()
 
-            if (httpStatus.isSuccessful(_merge)) {
+            if (_merged) {
                 utils.log(("Pull request #" + pullRequest.id + " successfully merged (No rebase needed)").green)
-
-            } else if (httpStatus.isFailed(_merge)) { // 4XX errors
+            } else {
 
                 if (await pullRequest.isOutOfDate()) {
 
-                    let _rebase = await pullRequest.rebase(pullRequest.id)
-
-                    if (httpStatus.isSuccessful(_rebase)) {
+                    if (await pullRequest.rebase()) {
                         utils.log(("Pull request #" + pullRequest.id + " successfully rebased").green)
 
                         let retries = 0
-                        while (httpStatus.isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
-                            _merge = await pullRequest.merge()
-
-                            if (httpStatus.isSuccessful(_merge)) {
-                                utils.log("Pull request successfuly merged after rebasing.".green)
-                            } else {
-                                if (await !pullRequest.waitingForBuild() || retries > 60) {
-                                    utils.log("Failed to merge pull request due to problems after rebase".red)
+                        while (!_merged) { // Monitor pull request to merge after builds are successfull
+                            await utils.wait(process.env.MERGE_INTERVAL)
+                            if (pullRequest.canMerge()) {
+                                _merged = await pullRequest.merge()
+                                if (_merged) {
+                                    utils.log("Pull request successfuly merged after rebasing.".green)
                                     break;
+                                } else {
+                                    if (await !pullRequest.isWaitingForBuild() || retries > 60) {
+                                        utils.log("Failed to merge pull request due to problems after rebase".red)
+                                        break;
+                                    }
                                 }
+                            } else {
+                                utils.log("Merge check status for pull request #" + pullRequest.id + " changed after rebase\n")
+                                break;
                             }
-
                             retries++
-                            await utils.wait(process.env.MERGE_INTERVAL) // Merge interval
                         }
 
                     } else {
                         utils.log("Rebased failed for pull request #" + pullRequest.id)
                     }
-                }
 
-            } else {
-                utils.log("Skipping pull request #" + pullRequest.id + " due to other merge checks not passed\n")
-                utils.log(JSON.stringify(_merge.data.errors))
+                } else {
+                    utils.log("Skipping pull request #" + pullRequest.id + " due to other merge checks not passed\n")
+                    utils.log(JSON.stringify(_merge.data.errors))
+                }
             }
 
         } else {
             utils.log(('Pull request #' + pullRequest.id + ' is not labeled as automerge or has failed checks').yellow)
         }
 
-        await utils.wait(5) // Timeout between each pull request processing
+        await utils.wait(process.env.PROCESSING_INTERVAL)
 
     }
 
     utils.log("Finished parsing all pull requests, restarting in 5 seconds\n".cyan)
-    setTimeout(main, 5 * 1000);
+    setTimeout(main, process.env.PROCESSING_INTERVAL * 1000);
 }

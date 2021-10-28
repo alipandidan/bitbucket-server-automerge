@@ -1,15 +1,12 @@
 require('colors');
 require('dotenv').config()
 const utils = require('../utils')
-const httpStatus = require('../http-status')
 const {bitbucketPrApi, bitbucketGitApi} = require('./api')
-const HttpResponse = require('./http-response')
 
 class PullRequest {
 
     constructor(pullRequestId) {
         this.id = pullRequestId.toString()
-        this.merged = false
         this.mergeVetoes = []
     }
 
@@ -20,6 +17,9 @@ class PullRequest {
             let _rebase = await bitbucketGitApi().post(this.id + '/rebase', {
                 version: latestPullRequestRevision.version
             })
+
+            // TODO: validate _rebase
+
             return true
         } catch(error) {
             utils.log(error.response.data)
@@ -37,6 +37,8 @@ class PullRequest {
                 version: latestPullRequestRevision.version
             })
 
+            // TODO: validate _merge
+
             return true
         } catch (error) {
             utils.log("Failed merging pull request #" + this.id + ": " + JSON.stringify(error.response.data.errors).red)
@@ -45,7 +47,7 @@ class PullRequest {
         }
     }
 
-    waitingForBuild() {
+    isWaitingForBuild() {
         return utils.hasOne(this.mergeVetoes) && this.mergeVetoes.some(error =>
             error.vetoes?.some(veto =>
                 veto.detailedMessage.includes('it has in-progress builds') ||
@@ -60,7 +62,6 @@ class PullRequest {
         )
     }
 
-    // Experimental
     async canMerge() {
         utils.log("Getting pull request #" + this.id + " merge status")
         try {
@@ -83,7 +84,8 @@ class PullRequest {
             })
 
         } catch (error) {
-            return error.response
+            console.log(error.response?.data)
+            return false
         }
     }
 
