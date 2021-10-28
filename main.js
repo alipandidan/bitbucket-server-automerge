@@ -15,39 +15,35 @@ async function main() {
 
         if (await pullRequest.isAutoMerge()) {
 
-            let _merge = await pullRequest.merge() // Check for merge vetoes or do merge if all checks are passed
+            let _merge = await pullRequest.merge() // Check for merge vetoes or perform merge if all checks are passed.
 
             if (httpStatus.isSuccessful(_merge)) {
                 utils.log(("Pull request #" + pullRequest.id + " successfully merged (No rebase needed)").green)
-            } else if (httpStatus.isFailed(_merge)) {
-                utils.log("Failed merging pull request #" + pullRequest.id + ": " + JSON.stringify(_merge.data.errors))
+            } else if (httpStatus.isFailed(_merge)) { // 4XX errors
 
-                // Check if merge is rejected due to an out of date branch
-                if (utils.hasOne(_merge.data.errors) && _merge.data.errors.some(error => error.message.includes('configured to require fast-forward merges'))) {
-                    let _rebase = await pullRequest.rebase(pullRequest.id) // Do rebase
+                if (await pullRequest.isOutOfDate()) {
+
+                    let _rebase = await pullRequest.rebase(pullRequest.id)
 
                     if (httpStatus.isSuccessful(_rebase)) {
-                        utils.log("Pull request #" + pullRequest.id + " successfully rebased")
+                        utils.log(("Pull request #" + pullRequest.id + " successfully rebased").green)
 
-                        // _merge = await pullRequest.merge() // Get current merge status or do merge after rebase
-
+                        let retries = 0
                         while (httpStatus.isFailed(_merge)) { // Monitor pull request to merge after builds are successfull
                             _merge = await pullRequest.merge()
 
                             if (httpStatus.isSuccessful(_merge)) {
                                 utils.log("Pull request successfuly merged after rebasing.".green)
                             } else {
-                                const prHasProblems = _merge.data.errors.some(error =>
-                                    error.vetoes.some(veto => veto.detailedMessage.includes('approvals before this pull request can be merged'))
-                                )
-
-                                if (prHasProblems) {
-                                    utils.log("Failed to merge PR due to problems after rebase: ".red + JSON.stringify(_merge.data.errors))
+                                console.log(await !pullRequest.waitingForBuild())
+                                if (await !pullRequest.waitingForBuild() || retries > 60) {
+                                    utils.log("Failed to merge pull request due to problems after rebase".red)
                                     break;
                                 }
                             }
 
-                            await utils.wait(30)
+                            retries++
+                            await utils.wait(process.env.MERGE_INTERVAL) // Merge interval
                         }
 
                     } else {
