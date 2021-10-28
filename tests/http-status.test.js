@@ -10,7 +10,6 @@ describe('http-status.isFailed', () => {
     })
 });
 
-
 describe('http-status.isSuccessful', () => {
     test('if 2xx http code is considered ok', () => {
         expect(httpStatus.isSuccessful({status: 201})).toBe(true);
