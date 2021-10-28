@@ -1,23 +1,27 @@
 require('colors');
 require('dotenv').config()
-
 const utils = require('../utils')
+const httpStatus = require('../http-status')
 const {bitbucketPrApi, bitbucketGitApi} = require('./api')
+const HttpResponse = require('./http-response')
 
 class PullRequest {
 
     constructor(pullRequestId) {
-        this.id = pullRequestId
+        this.id = pullRequestId.toString()
+        this.merged = false
+        this.mergeVetoes = []
     }
 
     async rebase() {
         utils.log("Rebasing pull request #" + this.id)
         try {
-            let latestPullRequestRevision = await getPullRequest(this.id)
+            let latestPullRequestRevision = await this.getPullRequest()
             return await bitbucketGitApi().post(this.id + '/rebase', {
                 version: latestPullRequestRevision.version
             })
         } catch(error) {
+            utils.log(error.response.data)
             return error.response
         }
     }
@@ -25,17 +29,49 @@ class PullRequest {
     async merge() {
         utils.log("Merging pull request #" + this.id)
         try {
-            let latestPullRequestRevision = await getPullRequest(this.id)
+            let latestPullRequestRevision = await this.getPullRequest()
             return await bitbucketPrApi().post(this.id + '/merge', {
                 autoSubject: true,
                 version: latestPullRequestRevision.version
             })
-
         } catch (error) {
+            utils.log("Failed merging pull request #" + this.id + ": " + JSON.stringify(error.response.data.errors).red)
+            this.mergeVetoes = error?.response?.data?.errors
             return error.response
         }
     }
 
+    waitingForBuild() {
+        return utils.hasOne(this.mergeVetoes) && this.mergeVetoes.some(error =>
+            error.vetoes?.some(veto =>
+                veto.detailedMessage.includes('it has in-progress builds') ||
+                veto.detailedMessage.includes('need a minimum of one successful build')
+            )
+        )
+    }
+
+    isOutOfDate() {
+        return utils.hasOne(this.mergeVetoes) && this.mergeVetoes.some(error =>
+            error.message?.includes('configured to require fast-forward merges')
+        )
+    }
+
+    // Experimental
+    async canMerge() {
+        utils.log("Getting pull request #" + this.id + " merge status")
+        try {
+            let _mergeStatus = await bitbucketPrApi().get(this.id + '/merge')
+            if (_mergeStatus.data?.canMerge) {
+                return true
+            }
+            return false
+        } catch (error){
+            log(error.red)
+            return false
+        }
+    }
+
+    // Experimental
     async notifyPullRequest() {
         try {
             return await bitbucketPrApi().post(this.id + '/comments', {
@@ -63,6 +99,7 @@ class PullRequest {
             return Boolean(isAutoMergeAllowed)
 
         } catch(error) {
+            utils.log(error)
             return false
         }
     }
@@ -73,7 +110,40 @@ class PullRequest {
             let pullRequest =  await bitbucketPrApi().get(this.id)
             return pullRequest.data
         } catch (error) {
-            return error.response
+            utils.log(error)
+            return null
+        }
+    }
+
+    async rebaseAndMerge() {
+        console.log("Rebase and merge is in progress...")
+
+        // let retries = 0
+        let _merge = await this.merge()
+
+        while(httpStatus.isFailed(_merge)) {
+            let _rebase = await this.rebase()
+
+            if (httpStatus.isSuccessful(_rebase)) {
+
+                let _merge = await this.merge()
+                if (httpStatus.isSuccessful(_merge)) {
+                    utils.log("Pull request #" + pullRequest.id + " successfully rebased")
+                    break;
+                } else {
+
+
+                    utils.log("Retrying merge...".cyan)
+
+                }
+
+            } else {
+
+                utils.log("Rebase Failed".red)
+
+            }
+
+            await utils.wait(process.env.MERGE_INTERVAL)
         }
     }
 }

@@ -13,12 +13,13 @@ async function main() {
 
         let pullRequest = new PullRequest(_pullRequest.id)
 
-        if (await pullRequest.isAutoMerge()) {
+        if (await pullRequest.isAutoMerge() && await pullRequest.canMerge()) {
 
-            let _merge = await pullRequest.merge() // Check for merge vetoes or perform merge if all checks are passed.
+            let _merge = await pullRequest.merge() // Merge or return vetoes
 
             if (httpStatus.isSuccessful(_merge)) {
                 utils.log(("Pull request #" + pullRequest.id + " successfully merged (No rebase needed)").green)
+
             } else if (httpStatus.isFailed(_merge)) { // 4XX errors
 
                 if (await pullRequest.isOutOfDate()) {
@@ -35,7 +36,6 @@ async function main() {
                             if (httpStatus.isSuccessful(_merge)) {
                                 utils.log("Pull request successfuly merged after rebasing.".green)
                             } else {
-                                console.log(await !pullRequest.waitingForBuild())
                                 if (await !pullRequest.waitingForBuild() || retries > 60) {
                                     utils.log("Failed to merge pull request due to problems after rebase".red)
                                     break;
@@ -57,7 +57,7 @@ async function main() {
             }
 
         } else {
-            utils.log(('Pull request #' + pullRequest.id + ' is not labeled as automerge').yellow)
+            utils.log(('Pull request #' + pullRequest.id + ' is not labeled as automerge or has failed checks').yellow)
         }
 
         await utils.wait(5) // Timeout between each pull request processing
