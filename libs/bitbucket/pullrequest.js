@@ -17,12 +17,13 @@ class PullRequest {
         utils.log("Rebasing pull request #" + this.id)
         try {
             let latestPullRequestRevision = await this.getPullRequest()
-            return await bitbucketGitApi().post(this.id + '/rebase', {
+            let _rebase = await bitbucketGitApi().post(this.id + '/rebase', {
                 version: latestPullRequestRevision.version
             })
+            return true
         } catch(error) {
             utils.log(error.response.data)
-            return error.response
+            return false
         }
     }
 
@@ -30,14 +31,17 @@ class PullRequest {
         utils.log("Merging pull request #" + this.id)
         try {
             let latestPullRequestRevision = await this.getPullRequest()
-            return await bitbucketPrApi().post(this.id + '/merge', {
+
+            let _merge = await bitbucketPrApi().post(this.id + '/merge', {
                 autoSubject: true,
                 version: latestPullRequestRevision.version
             })
+
+            return true
         } catch (error) {
             utils.log("Failed merging pull request #" + this.id + ": " + JSON.stringify(error.response.data.errors).red)
             this.mergeVetoes = error?.response?.data?.errors
-            return error.response
+            return false
         }
     }
 
@@ -84,7 +88,7 @@ class PullRequest {
     }
 
     async isAutoMerge() {
-        utils.log(("Checking if pull request #" + this.id + " has auto merge label").yellow)
+        utils.log(("Checking if pull request #" + this.id + " has auto merge label"))
         try {
             let activities = await bitbucketPrApi().get(this.id + '/activities')
 
@@ -112,38 +116,6 @@ class PullRequest {
         } catch (error) {
             utils.log(error)
             return null
-        }
-    }
-
-    async rebaseAndMerge() {
-        console.log("Rebase and merge is in progress...")
-
-        // let retries = 0
-        let _merge = await this.merge()
-
-        while(httpStatus.isFailed(_merge)) {
-            let _rebase = await this.rebase()
-
-            if (httpStatus.isSuccessful(_rebase)) {
-
-                let _merge = await this.merge()
-                if (httpStatus.isSuccessful(_merge)) {
-                    utils.log("Pull request #" + pullRequest.id + " successfully rebased")
-                    break;
-                } else {
-
-
-                    utils.log("Retrying merge...".cyan)
-
-                }
-
-            } else {
-
-                utils.log("Rebase Failed".red)
-
-            }
-
-            await utils.wait(process.env.MERGE_INTERVAL)
         }
     }
 }
